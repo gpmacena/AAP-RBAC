@@ -1,0 +1,6 @@
+---
+# Os 4 perfis. Cada Team (area) tem uma role por perfil, "{Team} - {perfil}"
+# (ex.: "Linux - Auditor"), gerada de vars/rbac/roles.yml. O perfil de uma
+# pessoa e atribuido DIRETO NELA (usuario), na Organization do Team.
+# Usado por roles/rbac/tasks/assign_user.yml (playbooks/rbac_assign_user.yml).
+rbac_personas: [Administrator, Operator, Developer, Auditor]

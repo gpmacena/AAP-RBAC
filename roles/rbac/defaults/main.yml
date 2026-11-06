@@ -1,0 +1,14 @@
+---
+# Conexao com o AAP via variaveis de ambiente, as mesmas injetadas pela
+# credential "Red Hat Ansible Automation Platform" no Job Template.
+aap_host: "{{ lookup('ansible.builtin.env', 'CONTROLLER_HOST') | regex_replace('/$', '') }}"
+aap_username: "{{ lookup('ansible.builtin.env', 'CONTROLLER_USERNAME') }}"
+aap_password: "{{ lookup('ansible.builtin.env', 'CONTROLLER_PASSWORD') }}"
+aap_token: "{{ lookup('ansible.builtin.env', 'CONTROLLER_OAUTH_TOKEN') }}"
+aap_validate_certs: "{{ lookup('ansible.builtin.env', 'CONTROLLER_VERIFY_SSL') | default('true', true) | bool }}"
+
+# Modelos de role (vars/rbac/roles.yml) e perfis disponiveis
+# (vars/rbac/personas.yml), usados por tasks/org_create.yml,
+# tasks/area_roles.yml e tasks/assign_user.yml.
+rbac_roles: []
+rbac_personas: []

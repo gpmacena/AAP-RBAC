@@ -1,0 +1,29 @@
+---
+# Garante as 4 Custom Roles de cada Team (area) em "rbac_area_names", uma
+# por perfil, no formato "{area} - {perfil}" (ex.: "Linux - Auditor").
+# Nunca cria role com o prefixo generico "Custom - ..." - esse prefixo so
+# existe nos modelos de vars/rbac/roles.yml, usados aqui como base de
+# content_type/permissions.
+#
+# Requer: rbac_area_names (lista de nomes de area/Team) e rbac_roles
+# (modelos, vars/rbac/roles.yml).
+- name: Calcular as Custom Roles de cada area
+  ansible.builtin.set_fact:
+    rbac_area_roles: >-
+      {%- set out = [] -%}
+      {%- for area in rbac_area_names -%}
+      {%-   for base in rbac_roles -%}
+      {%-     if base.name is match('^Custom - (Administrator|Operator|Developer|Auditor)$') -%}
+      {%-       set new_name = base.name | regex_replace('^Custom', area) -%}
+      {%-       set _ = out.append({'name': new_name, 'content_type': base.content_type,
+                                     'permissions': base.permissions}) -%}
+      {%-     endif -%}
+      {%-   endfor -%}
+      {%- endfor -%}
+      {{ out }}
+
+- name: Garantir as Custom Roles de cada area
+  ansible.builtin.include_tasks: ensure_roles.yml
+  vars:
+    rbac_roles_to_ensure: "{{ rbac_area_roles }}"
+  when: rbac_area_roles | length > 0

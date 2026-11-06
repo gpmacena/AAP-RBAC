@@ -1,0 +1,113 @@
+---
+# Cria uma Organization e, para cada area informada (ex.: Windows, Linux),
+# um Team - para agrupar quem trabalha em cada area. O Team em si NAO
+# carrega permissao.
+#
+# Para cada Team, garante as 4 Custom Roles dele, "{Team} - {perfil}"
+# (Administrator/Operator/Developer/Auditor - ver tasks/area_roles.yml e
+# vars/rbac/roles.yml). Sao roles de Organization: valem para todos os
+# objetos da Organization. Nunca cria role com o nome generico "Custom - ...".
+#
+# O perfil de cada pessoa e definido depois, DIRETO NA PESSOA, via
+# playbooks/rbac_assign_user.yml (vincula "{Team} - {perfil}" ao usuario).
+#
+# Variaveis (preenchidas pelo survey do Job Template ou via -e):
+#   rbac_org_name         nome da Organization (ex.: Infra)
+#   rbac_org_description  descricao (opcional)
+#   rbac_org_teams        uma area por linha, ex.: "Windows\nLinux"
+#
+# Organizations e Teams que ja existem nao sao alterados nem recriados.
+# Usado por playbooks/rbac_org_create.yml.
+
+- name: Validar variaveis de conexao
+  ansible.builtin.assert:
+    that:
+      - aap_host | length > 0
+      - aap_token | length > 0 or (aap_username | length > 0 and aap_password | length > 0)
+    fail_msg: >-
+      Variaveis CONTROLLER_* ausentes. No AAP, anexe ao Job Template uma credential
+      do tipo "Red Hat Ansible Automation Platform".
+    quiet: true
+
+- name: Criar Organization e os Teams de area
+  module_defaults:
+    ansible.builtin.uri:
+      url_username: "{{ aap_username }}"
+      url_password: "{{ aap_password }}"
+      force_basic_auth: "{{ aap_token | length == 0 }}"
+      headers: "{{ {'Authorization': 'Bearer ' ~ aap_token} if aap_token | length > 0 else {} }}"
+      validate_certs: "{{ aap_validate_certs }}"
+      return_content: true
+  vars:
+    org_name: "{{ rbac_org_name | default('') | trim }}"
+    org_team_names: "{{ (rbac_org_teams | default('')).splitlines() | map('trim') | select | list }}"
+  block:
+    - name: Validar dados informados
+      ansible.builtin.assert:
+        that:
+          - org_name | length > 0
+          - org_team_names | length > 0
+          - org_team_names | unique | length == org_team_names | length
+        fail_msg: >-
+          Informe o nome da Organization e ao menos uma area, sem nomes
+          repetidos, uma por linha.
+        quiet: true
+
+    # ----------------------------------------------------------- Organization
+    - name: Verificar se a Organization ja existe
+      ansible.builtin.uri:
+        url: "{{ aap_host }}/api/gateway/v1/organizations/?name={{ org_name | urlencode }}"
+      register: org_lookup
+      check_mode: false  # consulta somente leitura
+
+    - name: Criar Organization
+      ansible.builtin.uri:
+        url: "{{ aap_host }}/api/gateway/v1/organizations/"
+        method: POST
+        body_format: json
+        body: {name: "{{ org_name }}", description: "{{ rbac_org_description | default('') | trim }}"}
+        status_code: 201
+      register: org_created
+      when: org_lookup.json.count == 0
+      changed_when: true
+
+    - name: Registrar id da Organization no gateway
+      ansible.builtin.set_fact:
+        org_gateway_id: "{{ org_created.json.id if org_lookup.json.count == 0 else org_lookup.json.results[0].id }}"
+      when: not (ansible_check_mode and org_lookup.json.count == 0)
+
+    # ------------------------------------------------------------------ Teams
+    - name: Verificar Teams existentes
+      ansible.builtin.uri:
+        url: "{{ aap_host }}/api/gateway/v1/teams/?name={{ item | urlencode }}&organization__name={{ org_name | urlencode }}"
+      loop: "{{ org_team_names }}"
+      register: team_lookup
+      check_mode: false  # consulta somente leitura
+
+    - name: Criar Teams
+      ansible.builtin.uri:
+        url: "{{ aap_host }}/api/gateway/v1/teams/"
+        method: POST
+        body_format: json
+        body:
+          name: "{{ item.item }}"
+          organization: "{{ org_gateway_id | default(omit) }}"  # indefinido so em --check de Organization nova
+        status_code: 201
+      loop: "{{ team_lookup.results }}"
+      loop_control: {label: "{{ item.item }}"}
+      when: item.json.count == 0
+      changed_when: true
+
+    # ------------------------------------------------------------------ Roles
+    - name: Garantir as Custom Roles de cada area
+      ansible.builtin.include_tasks: area_roles.yml
+      vars:
+        rbac_area_names: "{{ org_team_names }}"
+
+    - name: Resumo
+      ansible.builtin.debug:
+        msg:
+          - "Organization: {{ org_name }} ({{ 'criada' if org_lookup.json.count == 0 else 'ja existia' }})"
+          - "Teams: {{ org_team_names | join(', ') }}"
+          - "Roles dos Teams garantidas: {{ rbac_area_roles | map(attribute='name') | join(', ') }}"
+          - "Para dar um perfil a uma pessoa, use playbooks/rbac_assign_user.yml (username + Organization + perfil)."

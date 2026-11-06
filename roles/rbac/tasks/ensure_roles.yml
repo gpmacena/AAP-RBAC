@@ -1,0 +1,146 @@
+---
+# Garante as Custom Roles de "rbac_roles_to_ensure" (lista no formato de rbac_roles).
+#
+# PROBLEMA (AAP 2.7): atualizar as permissoes de uma role que ja existe NAO
+# propaga para o gateway - so create/delete propagam. O modulo
+# role_definition reporta sucesso mesmo assim, entao a divergencia entre o
+# que foi pedido e o que esta realmente valendo (gateway) fica invisivel.
+#
+# Por isso, quando uma role ja existe e as permissoes desejadas divergem do
+# controller OU do gateway, em vez de so atualizar: guardamos as
+# atribuicoes atuais da role (Team e User - inclusive as feitas direto pela
+# UI, que podem nao estar em vars/rbac/team_assignments.yml), apagamos a
+# role, recriamos com as permissoes corretas, aguardamos ela aparecer no
+# gateway, e refazemos as atribuicoes com o id novo. Roles que ainda nao
+# existem sao criadas normalmente (create propaga sem problema).
+#
+# Em --check, nada e apagado/recriado - so avisamos quais roles estao
+# divergentes.
+
+- name: Ler roles atuais no controller
+  ansible.builtin.set_fact:
+    rbac_current_perms_controller: >-
+      {{ query('ansible.controller.controller_api', 'role_definitions',
+               query_params={'managed': false}, return_all=true)
+         | items2dict(key_name='name', value_name='permissions') }}
+
+- name: Ler roles atuais no gateway
+  ansible.builtin.uri:
+    url: "{{ aap_host }}/api/gateway/v1/role_definitions/?managed=false&page_size=200"
+  register: rbac_gateway_roles_lookup
+  check_mode: false  # consulta somente leitura
+
+- name: Mapear permissoes atuais do gateway por nome de role
+  ansible.builtin.set_fact:
+    rbac_current_perms_gateway: "{{ rbac_gateway_roles_lookup.json.results | items2dict(key_name='name', value_name='permissions') }}"
+
+- name: Calcular quais roles existentes estao com permissoes divergentes
+  ansible.builtin.set_fact:
+    rbac_roles_drifted: >-
+      {%- set out = [] -%}
+      {%- for r in rbac_roles_to_ensure -%}
+      {%-   set ctrl = rbac_current_perms_controller[r.name] | default(none) -%}
+      {%-   set gw = rbac_current_perms_gateway[r.name] | default(none) -%}
+      {%-   if ctrl is not none and (
+               (ctrl | sort) != (r.permissions | sort) or
+               gw is none or
+               (gw | sort) != (r.permissions | sort)
+             ) -%}
+      {%-     set _ = out.append(r.name) -%}
+      {%-   endif -%}
+      {%- endfor -%}
+      {{ out }}
+
+- name: Avisar quais roles seriam recriadas
+  ansible.builtin.debug:
+    msg: >-
+      [check mode] A role '{{ item }}' tem permissoes divergentes entre o
+      desejado e o controller/gateway. Para corrigir, ela precisa ser
+      apagada e recriada (rode sem --check).
+  loop: "{{ rbac_roles_drifted }}"
+  when: ansible_check_mode
+
+- name: Corrigir roles com permissoes divergentes (apagar e recriar)
+  when: not ansible_check_mode and rbac_roles_drifted | length > 0
+  block:
+    - name: Guardar atribuicoes atuais de Team das roles divergentes
+      ansible.builtin.set_fact:
+        rbac_backup_team_assignments: >-
+          {%- set out = [] -%}
+          {%- for name in rbac_roles_drifted -%}
+          {%-   for a in query('ansible.controller.controller_api', 'role_team_assignments',
+                                query_params={'role_definition__name': name}, return_all=true) -%}
+          {%-     set _ = out.append({'role': name, 'team': a.team, 'object_id': a.object_id}) -%}
+          {%-   endfor -%}
+          {%- endfor -%}
+          {{ out }}
+
+    - name: Guardar atribuicoes atuais de User das roles divergentes
+      ansible.builtin.set_fact:
+        rbac_backup_user_assignments: >-
+          {%- set out = [] -%}
+          {%- for name in rbac_roles_drifted -%}
+          {%-   for a in query('ansible.controller.controller_api', 'role_user_assignments',
+                                query_params={'role_definition__name': name}, return_all=true) -%}
+          {%-     set _ = out.append({'role': name, 'user': a.user, 'object_id': a.object_id}) -%}
+          {%-   endfor -%}
+          {%- endfor -%}
+          {{ out }}
+
+    - name: Apagar roles divergentes
+      ansible.controller.role_definition:
+        name: "{{ item }}"
+        state: absent
+      loop: "{{ rbac_roles_drifted }}"
+      changed_when: true
+
+    - name: Recriar roles divergentes com as permissoes corretas
+      ansible.controller.role_definition:
+        name: "{{ item.name }}"
+        description: "{{ item.description | default(item.name) }}"
+        content_type: "{{ item.content_type }}"
+        permissions: "{{ item.permissions }}"
+        state: present
+      loop: "{{ rbac_roles_to_ensure | selectattr('name', 'in', rbac_roles_drifted) | list }}"
+      loop_control: {label: "{{ item.name }}"}
+      changed_when: true
+
+    - name: Aguardar as roles recriadas aparecerem no gateway
+      ansible.builtin.uri:
+        url: "{{ aap_host }}/api/gateway/v1/role_definitions/?name={{ item | urlencode }}"
+      register: rbac_role_recreated
+      until: rbac_role_recreated.json.count == 1
+      retries: 20
+      delay: 3
+      loop: "{{ rbac_roles_drifted }}"
+      check_mode: false  # consulta somente leitura
+
+    - name: Refazer as atribuicoes de Team das roles recriadas
+      ansible.controller.role_team_assignment:
+        role_definition: "{{ item.role }}"
+        team: "{{ item.team }}"
+        object_id: "{{ item.object_id }}"
+        state: present
+      loop: "{{ rbac_backup_team_assignments }}"
+      loop_control: {label: "{{ item.role }} -> team {{ item.team }} @ {{ item.object_id }}"}
+      changed_when: true
+
+    - name: Refazer as atribuicoes de User das roles recriadas
+      ansible.controller.role_user_assignment:
+        role_definition: "{{ item.role }}"
+        user: "{{ item.user }}"
+        object_id: "{{ item.object_id }}"
+        state: present
+      loop: "{{ rbac_backup_user_assignments }}"
+      loop_control: {label: "{{ item.role }} -> user {{ item.user }} @ {{ item.object_id }}"}
+      changed_when: true
+
+- name: Garantir Custom Roles novas ou ja corretas
+  ansible.controller.role_definition:
+    name: "{{ item.name }}"
+    description: "{{ item.description | default(item.name) }}"
+    content_type: "{{ item.content_type }}"
+    permissions: "{{ item.permissions }}"
+    state: present
+  loop: "{{ rbac_roles_to_ensure | rejectattr('name', 'in', rbac_roles_drifted) | list }}"
+  loop_control: {label: "{{ item.name }}"}

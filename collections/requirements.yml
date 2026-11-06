@@ -1,0 +1,3 @@
+collections:
+  - name: ansible.controller
+    version: ">=4.8.0"  # role_definition / role_team_assignment (RBAC AAP 2.7)

@@ -1,0 +1,27 @@
+---
+# Define o perfil (Administrator, Operator, Developer, Auditor) de UMA
+# pessoa numa area, direto nela - a permissao fica no usuario, nao no Team.
+# Ex.: gabriel / Infra / Linux / Auditor -> recebe "Linux - Auditor - *" nos
+# objetos da area e perde as roles antigas daquela area. Detalhes em
+# roles/rbac/tasks/assign_user.yml.
+#
+# Variaveis (preenchidas pelo survey do Job Template ou via -e):
+#   rbac_user_username  username do usuario (precisa ja existir no AAP)
+#   rbac_org_name       nome da Organization (ex.: Infra)
+#   rbac_team_name      area/Team (ex.: Linux) - obrigatorio exceto Administrator
+#   rbac_persona        Administrator | Operator | Developer | Auditor
+
+- name: RBAC AAP 2.7 - Definir o perfil de um usuario
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars_files:
+    - ../vars/rbac/personas.yml
+    - ../vars/rbac/roles.yml
+
+  tasks:
+    - name: Atribuir o perfil ao usuario
+      ansible.builtin.include_role:
+        name: rbac
+        tasks_from: assign_user.yml

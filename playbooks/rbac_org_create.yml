@@ -1,0 +1,27 @@
+---
+# Cria uma Organization e, para cada area informada, um Team + as 4 Custom
+# Roles desse Team ("{Team} - Administrator", "{Team} - Operator",
+# "{Team} - Developer", "{Team} - Auditor"), prontas para vincular usuarios.
+# Funciona para qualquer Organization/area - nao ha nada fixo no codigo.
+#
+# O perfil de cada pessoa (Administrator/Operator/Developer/Auditor) e
+# definido depois, direto nela, com playbooks/rbac_assign_user.yml.
+#
+# Variaveis (preenchidas pelo survey do Job Template ou via -e):
+#   rbac_org_name         nome da Organization (ex.: Infra)
+#   rbac_org_description  descricao (opcional)
+#   rbac_org_teams        uma area por linha, ex.: "Windows\nLinux"
+
+- name: RBAC AAP 2.7 - Criar Organization, Teams de area e suas Custom Roles
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars_files:
+    - ../vars/rbac/roles.yml
+
+  tasks:
+    - name: Criar Organization, Teams de area e Custom Roles
+      ansible.builtin.include_role:
+        name: rbac
+        tasks_from: org_create.yml

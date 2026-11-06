@@ -1,0 +1,204 @@
+---
+# Define o perfil (Administrator, Operator, Developer, Auditor) de UMA
+# pessoa num Team - a permissao fica DIRETO NO USUARIO, nunca no Team.
+#
+#   1. adiciona o usuario como membro do Team (agrupamento);
+#   2. garante as 4 roles do Team ("{Team} - {perfil}", tasks/area_roles.yml);
+#   3. atribui ao usuario a role "{Team} - {perfil}" na Organization do Team.
+#      A role e de Organization: vale para todos os objetos dela, inclusive
+#      os criados depois;
+#   4. remove as outras roles desse Team que ele tinha (ex.: era Operator,
+#      virou Auditor) - ele fica SO com o perfil escolhido nesse Team.
+#      Roles de outros Teams nao sao tocadas.
+#
+# Variaveis (preenchidas pelo survey do Job Template ou via -e):
+#   rbac_user_username  username do usuario (precisa ja existir no AAP)
+#   rbac_org_name       nome da Organization (ex.: Infra)
+#   rbac_team_name      Team (ex.: Linux)
+#   rbac_persona        Administrator | Operator | Developer | Auditor
+
+- name: Validar variaveis de conexao
+  ansible.builtin.assert:
+    that:
+      - aap_host | length > 0
+      - aap_token | length > 0 or (aap_username | length > 0 and aap_password | length > 0)
+    fail_msg: >-
+      Variaveis CONTROLLER_* ausentes. No AAP, anexe ao Job Template uma credential
+      do tipo "Red Hat Ansible Automation Platform".
+    quiet: true
+
+- name: Definir o perfil do usuario
+  module_defaults:
+    ansible.builtin.uri:
+      url_username: "{{ aap_username }}"
+      url_password: "{{ aap_password }}"
+      force_basic_auth: "{{ aap_token | length == 0 }}"
+      headers: "{{ {'Authorization': 'Bearer ' ~ aap_token} if aap_token | length > 0 else {} }}"
+      validate_certs: "{{ aap_validate_certs }}"
+      return_content: true
+  vars:
+    user_name: "{{ rbac_user_username | default('') | trim }}"
+    org_name: "{{ rbac_org_name | default('') | trim }}"
+    team_name: "{{ rbac_team_name | default('') | trim }}"
+    persona: "{{ rbac_persona | default('') | trim | title }}"
+    persona_role_name: "{{ team_name ~ ' - ' ~ persona }}"
+    team_role_names: "{{ rbac_personas | map('regex_replace', '^', team_name ~ ' - ') | list }}"
+  block:
+    - name: Validar dados informados
+      ansible.builtin.assert:
+        that:
+          - user_name | length > 0
+          - org_name | length > 0
+          - team_name | length > 0
+          - persona in rbac_personas
+        fail_msg: >-
+          Informe username, Organization, Team e um perfil valido
+          ({{ rbac_personas | join(', ') }}).
+        quiet: true
+
+    # ------------------------------------------------- gateway (validacoes)
+    - name: Buscar o usuario
+      ansible.builtin.uri:
+        url: "{{ aap_host }}/api/gateway/v1/users/?username={{ user_name | urlencode }}"
+      register: user_lookup
+      check_mode: false  # consulta somente leitura
+
+    - name: Falhar se o usuario nao existir
+      ansible.builtin.assert:
+        that: user_lookup.json.count == 1
+        fail_msg: "Usuario '{{ user_name }}' nao encontrado no AAP (usuarios do AD so aparecem apos o primeiro login)."
+        quiet: true
+
+    - name: Buscar a Organization
+      ansible.builtin.uri:
+        url: "{{ aap_host }}/api/gateway/v1/organizations/?name={{ org_name | urlencode }}"
+      register: org_lookup
+      check_mode: false  # consulta somente leitura
+
+    - name: Falhar se a Organization nao existir
+      ansible.builtin.assert:
+        that: org_lookup.json.count == 1
+        fail_msg: "Organization '{{ org_name }}' nao encontrada no AAP."
+        quiet: true
+
+    - name: Buscar o Team
+      ansible.builtin.uri:
+        url: "{{ aap_host }}/api/gateway/v1/teams/?name={{ team_name | urlencode }}&organization={{ org_lookup.json.results[0].id }}"
+      register: team_lookup
+      check_mode: false  # consulta somente leitura
+
+    - name: Falhar se o Team nao existir
+      ansible.builtin.assert:
+        that: team_lookup.json.count == 1
+        fail_msg: >-
+          Team '{{ team_name }}' nao encontrado na Organization '{{ org_name }}'.
+          Crie antes com o Job Template "RBAC - Criar Organização com Teams".
+        quiet: true
+
+    # --------------------------------------------- Team (agrupamento)
+    # Membros de Team sao gerenciados pelo gateway (o controller so recebe
+    # a sincronizacao), entao a associacao e feita na API do gateway.
+    - name: Verificar se o usuario ja e membro do Team
+      ansible.builtin.uri:
+        url: "{{ aap_host }}/api/gateway/v1/teams/{{ team_lookup.json.results[0].id }}/users/?username={{ user_name | urlencode }}"
+      register: team_member_lookup
+      check_mode: false  # consulta somente leitura
+
+    - name: Buscar a role Team Member no gateway
+      ansible.builtin.uri:
+        url: "{{ aap_host }}/api/gateway/v1/role_definitions/?name=Team%20Member"
+      register: team_member_role
+      check_mode: false  # consulta somente leitura
+      when: team_member_lookup.json.count == 0
+
+    - name: Adicionar o usuario ao Team
+      ansible.builtin.uri:
+        url: "{{ aap_host }}/api/gateway/v1/role_user_assignments/"
+        method: POST
+        body_format: json
+        body:
+          role_definition: "{{ team_member_role.json.results[0].id }}"
+          user: "{{ user_lookup.json.results[0].id }}"
+          object_id: "{{ team_lookup.json.results[0].id }}"
+        status_code: 201
+      changed_when: true
+      when: team_member_lookup.json.count == 0
+
+    # ------------------------------------------- controller (permissoes)
+    # Organization e usuario sao sincronizados do gateway ao controller.
+    - name: Aguardar a Organization no controller
+      ansible.builtin.uri:
+        url: "{{ aap_host }}/api/controller/v2/organizations/?name={{ org_name | urlencode }}"
+      register: org_ctrl
+      until: org_ctrl.json.count == 1
+      retries: 20
+      delay: 3
+      check_mode: false  # consulta somente leitura
+
+    - name: Aguardar o usuario no controller
+      ansible.builtin.uri:
+        url: "{{ aap_host }}/api/controller/v2/users/?username={{ user_name | urlencode }}"
+      register: user_ctrl
+      until: user_ctrl.json.count == 1
+      retries: 20
+      delay: 3
+      check_mode: false  # consulta somente leitura
+
+    - name: Registrar ids do controller
+      ansible.builtin.set_fact:
+        ctrl_org_id: "{{ org_ctrl.json.results[0].id }}"
+        ctrl_user_id: "{{ user_ctrl.json.results[0].id }}"
+
+    - name: Garantir as 4 roles do Team
+      ansible.builtin.include_tasks: area_roles.yml
+      vars:
+        rbac_area_names: ["{{ team_name }}"]
+
+    - name: Ler as atribuicoes atuais do usuario
+      ansible.builtin.set_fact:
+        rbac_role_names_by_id: >-
+          {{ query('ansible.controller.controller_api', 'role_definitions',
+                   query_params={'managed': false}, return_all=true)
+             | items2dict(key_name='id', value_name='name') }}
+        rbac_user_current: >-
+          {{ query('ansible.controller.controller_api', 'role_user_assignments',
+                   query_params={'user': ctrl_user_id}, return_all=true) }}
+
+    # So entram na conta as roles deste Team, nesta Organization.
+    - name: Calcular as roles do Team a remover
+      ansible.builtin.set_fact:
+        rbac_to_remove: >-
+          {%- set out = [] -%}
+          {%- for a in rbac_user_current -%}
+          {%-   set name = rbac_role_names_by_id[a.role_definition] | default('') -%}
+          {%-   if name in team_role_names and name != persona_role_name
+                   and a.object_id | string == ctrl_org_id | string -%}
+          {%-     set _ = out.append(name) -%}
+          {%-   endif -%}
+          {%- endfor -%}
+          {{ out }}
+
+    - name: Remover as outras roles do Team
+      ansible.controller.role_user_assignment:
+        role_definition: "{{ item }}"
+        user: "{{ ctrl_user_id }}"
+        object_id: "{{ ctrl_org_id }}"
+        state: absent
+      loop: "{{ rbac_to_remove }}"
+      loop_control: {label: "{{ user_name }} -x- {{ item }} @ organization '{{ org_name }}'"}
+
+    - name: Atribuir ao usuario a role do perfil
+      ansible.controller.role_user_assignment:
+        role_definition: "{{ persona_role_name }}"
+        user: "{{ ctrl_user_id }}"
+        object_id: "{{ ctrl_org_id }}"
+        state: present
+
+    - name: Resumo
+      ansible.builtin.debug:
+        msg:
+          - "Usuario: {{ user_name }}"
+          - "Organization: {{ org_name }}"
+          - "Team: {{ team_name }}"
+          - "Role atribuida: {{ persona_role_name }} (vale para todos os objetos da Organization '{{ org_name }}')"
+          - "Roles removidas: {{ rbac_to_remove if rbac_to_remove | length > 0 else 'nenhuma' }}"
