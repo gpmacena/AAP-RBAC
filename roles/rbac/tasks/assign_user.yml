@@ -2,14 +2,16 @@
 # Define o perfil (Administrator, Operator, Developer, Auditor) de UMA
 # pessoa num Team - a permissao fica DIRETO NO USUARIO, nunca no Team.
 #
-#   1. adiciona o usuario como membro do Team (agrupamento);
-#   2. garante as 4 roles do Team ("{Team} - {perfil}", tasks/area_roles.yml);
-#   3. atribui ao usuario a role "{Team} - {perfil}" na Organization do Team.
+#   1. garante as 4 roles do Team ("{Team} - {perfil}", tasks/area_roles.yml);
+#   2. atribui ao usuario a role "{Team} - {perfil}" na Organization do Team.
 #      A role e de Organization: vale para todos os objetos dela, inclusive
 #      os criados depois;
-#   4. remove as outras roles desse Team que ele tinha (ex.: era Operator,
+#   3. remove as outras roles desse Team que ele tinha (ex.: era Operator,
 #      virou Auditor) - ele fica SO com o perfil escolhido nesse Team.
 #      Roles de outros Teams nao sao tocadas.
+#
+# O usuario NAO e adicionado como membro (Team Member) do Team: o Team serve
+# so para nomear a role. A permissao vem apenas da role "{Team} - {perfil}".
 #
 # Variaveis (preenchidas pelo survey do Job Template ou via -e):
 #   rbac_user_username  username do usuario (precisa ja existir no AAP)
@@ -94,35 +96,6 @@
           Team '{{ team_name }}' nao encontrado na Organization '{{ org_name }}'.
           Crie antes com o Job Template "RBAC - Criar Organização com Teams".
         quiet: true
-
-    # --------------------------------------------- Team (agrupamento)
-    # Membros de Team sao gerenciados pelo gateway (o controller so recebe
-    # a sincronizacao), entao a associacao e feita na API do gateway.
-    - name: Verificar se o usuario ja e membro do Team
-      ansible.builtin.uri:
-        url: "{{ aap_host }}/api/gateway/v1/teams/{{ team_lookup.json.results[0].id }}/users/?username={{ user_name | urlencode }}"
-      register: team_member_lookup
-      check_mode: false  # consulta somente leitura
-
-    - name: Buscar a role Team Member no gateway
-      ansible.builtin.uri:
-        url: "{{ aap_host }}/api/gateway/v1/role_definitions/?name=Team%20Member"
-      register: team_member_role
-      check_mode: false  # consulta somente leitura
-      when: team_member_lookup.json.count == 0
-
-    - name: Adicionar o usuario ao Team
-      ansible.builtin.uri:
-        url: "{{ aap_host }}/api/gateway/v1/role_user_assignments/"
-        method: POST
-        body_format: json
-        body:
-          role_definition: "{{ team_member_role.json.results[0].id }}"
-          user: "{{ user_lookup.json.results[0].id }}"
-          object_id: "{{ team_lookup.json.results[0].id }}"
-        status_code: 201
-      changed_when: true
-      when: team_member_lookup.json.count == 0
 
     # ------------------------------------------- controller (permissoes)
     # Organization e usuario sao sincronizados do gateway ao controller.

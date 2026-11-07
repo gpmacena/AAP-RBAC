@@ -1,6 +1,6 @@
 ---
 galaxy_info:
-  author: "AAP Admin"
+  author: "SEU_NOME_AQUI"
   description: "RBAC no AAP 2.7 via API do gateway - Organizations, Teams, Custom Roles (role_definition) e atribuicoes (role_team_assignment) por persona"
   license: "GPL-3.0-or-later"
   min_ansible_version: "2.14"

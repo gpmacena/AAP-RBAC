@@ -6,6 +6,19 @@ duplicar).
 
 Organization de todos os objetos abaixo: **Default**.
 
+## Antes de começar — o que preencher
+
+Este é um template. Troque os valores abaixo pelos do seu ambiente antes de
+seguir os passos:
+
+| Placeholder | O que colocar |
+|---|---|
+| `<voce>` (seção 1) | seu usuário/organização no Git (GitHub, GitLab, etc.) |
+| `https://aap.lab.local` (seções 2, 5, 6) | URL real do seu AAP |
+| `admin:SENHA` (seções 5, 6) | usuário:senha (ou token) de uma conta admin do AAP, só para rodar o `curl` que cria o survey — não fica salvo em lugar nenhum do projeto |
+| `<ID>` (seções 5, 6) | ID numérico do Job Template, visível na URL dele depois de criado |
+| `Infra`, `Windows`, `Linux` | nomes de exemplo — use a Organization e os Teams (áreas) reais do seu ambiente |
+
 ## Modelo
 
 - **1 Organization** (ex.: `Infra`) para todas as áreas.

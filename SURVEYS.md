@@ -64,16 +64,19 @@ curl -sk -u admin:SENHA -H 'Content-Type: application/json' \
 ## JT — RBAC - Definir Perfil de Usuário
 
 Vincula ao usuário (direto nele, nunca no Team) a role `{Team} - {Perfil}`.
-Ex.: `gabriel`, Team `Linux`, perfil `Auditor` → recebe `Linux - Auditor`.
+Ex.: `jsilva`, Team `Linux`, perfil `Auditor` → recebe `Linux - Auditor`.
 
 O que o job faz:
 
-1. adiciona o usuário como membro do Team;
-2. garante as 4 roles do Team (`{Team} - Administrator/Operator/Developer/Auditor`);
-3. vincula ao usuário a role `{Team} - {Perfil}` na Organization do Team;
-4. remove as outras roles desse Team que ele tinha (ex.: era Operator, virou
+1. garante as 4 roles do Team (`{Team} - Administrator/Operator/Developer/Auditor`);
+2. vincula ao usuário a role `{Team} - {Perfil}` na Organization do Team;
+3. remove as outras roles desse Team que ele tinha (ex.: era Operator, virou
    Auditor) — ele fica **só** com o perfil escolhido. Roles de outros Teams
    não são tocadas.
+
+> O usuário **não** é adicionado como membro (`Team Member`) do Team: o
+> Team só serve para nomear a role. A permissão vem exclusivamente da role
+> `{Team} - {Perfil}`.
 
 > As roles são de **Organization**: valem para **todos** os objetos da
 > Organization do Team (inclusive os criados depois). Um `Linux - Auditor`

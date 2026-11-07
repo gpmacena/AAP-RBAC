@@ -1,7 +1,7 @@
 ---
 # Define o perfil (Administrator, Operator, Developer, Auditor) de UMA
 # pessoa numa area, direto nela - a permissao fica no usuario, nao no Team.
-# Ex.: gabriel / Infra / Linux / Auditor -> recebe "Linux - Auditor - *" nos
+# Ex.: jsilva / Infra / Linux / Auditor -> recebe "Linux - Auditor - *" nos
 # objetos da area e perde as roles antigas daquela area. Detalhes em
 # roles/rbac/tasks/assign_user.yml.
 #
