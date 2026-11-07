@@ -14,9 +14,7 @@ seguir os passos:
 | Placeholder | O que colocar |
 |---|---|
 | `<voce>` (seção 1) | seu usuário/organização no Git (GitHub, GitLab, etc.) |
-| `https://aap.lab.local` (seções 2, 5, 6) | URL real do seu AAP |
-| `admin:SENHA` (seções 5, 6) | usuário:senha (ou token) de uma conta admin do AAP, só para rodar o `curl` que cria o survey — não fica salvo em lugar nenhum do projeto |
-| `<ID>` (seções 5, 6) | ID numérico do Job Template, visível na URL dele depois de criado |
+| `https://aap.lab.local` (seção 2) | URL real do seu AAP |
 | `Infra`, `Windows`, `Linux` | nomes de exemplo — use a Organization e os Teams (áreas) reais do seu ambiente |
 
 ## Modelo
@@ -92,24 +90,11 @@ um Team simples (só agrupamento, sem role).
 | Inventory | `Localhost` |
 | Credentials | `AAP Controller - Admin` |
 | Execution Environment | `Default execution environment` |
-| Survey | **Ativado** (spec abaixo) |
+| Survey | **Ativado** (perguntas abaixo) |
 | Ask Variables on Launch | Não |
 
-### Survey spec
-
-```bash
-curl -sk -u admin:SENHA -H 'Content-Type: application/json' \
-  -X POST https://aap.lab.local/api/controller/v2/job_templates/<ID>/survey_spec/ \
-  -d '{
-    "name": "",
-    "description": "",
-    "spec": [
-      {"question_name": "Nome da Organization", "variable": "rbac_org_name", "type": "text", "min": 1, "max": 512, "required": true},
-      {"question_name": "Descrição da Organization", "variable": "rbac_org_description", "type": "text", "min": 0, "max": 1024, "required": false},
-      {"question_name": "Áreas (uma por linha)", "question_description": "Uma área por linha, ex.: Windows / Linux. Vira um Team simples por área.", "variable": "rbac_org_teams", "type": "textarea", "min": 1, "max": 4096, "required": true, "default": "Windows\nLinux"}
-    ]
-  }'
-```
+Pela UI: aba **Survey** → **Add** → crie as 3 perguntas descritas em
+[SURVEYS.md](SURVEYS.md#jt--rbac---criar-organização-com-teams), na ordem.
 
 ## 6. Job Template — "RBAC - Definir Perfil de Usuário"
 
@@ -126,25 +111,11 @@ para agrupamento.
 | Inventory | `Localhost` |
 | Credentials | `AAP Controller - Admin` |
 | Execution Environment | `Default execution environment` |
-| Survey | **Ativado** (spec abaixo) |
+| Survey | **Ativado** (perguntas abaixo) |
 | Ask Variables on Launch | Não |
 
-### Survey spec
-
-```bash
-curl -sk -u admin:SENHA -H 'Content-Type: application/json' \
-  -X POST https://aap.lab.local/api/controller/v2/job_templates/<ID>/survey_spec/ \
-  -d '{
-    "name": "",
-    "description": "",
-    "spec": [
-      {"question_name": "Username", "variable": "rbac_user_username", "type": "text", "min": 1, "max": 150, "required": true},
-      {"question_name": "Nome da Organization", "variable": "rbac_org_name", "type": "text", "min": 1, "max": 512, "required": true},
-      {"question_name": "Perfil", "variable": "rbac_persona", "type": "multiplechoice", "choices": "Administrator\nOperator\nDeveloper\nAuditor", "required": true},
-      {"question_name": "Team/área (opcional)", "variable": "rbac_team_name", "type": "text", "min": 0, "max": 512, "required": false}
-    ]
-  }'
-```
+Pela UI: aba **Survey** → **Add** → crie as 4 perguntas descritas em
+[SURVEYS.md](SURVEYS.md#jt--rbac---definir-perfil-de-usuário), na ordem.
 
 ## Validação pós-criação
 

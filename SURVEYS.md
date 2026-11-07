@@ -45,19 +45,9 @@ recriados nem alterados**.
 
 ### Criar o survey no JT
 
-```bash
-curl -sk -u admin:SENHA -H 'Content-Type: application/json' \
-  -X POST https://aap.lab.local/api/controller/v2/job_templates/<ID>/survey_spec/ \
-  -d '{
-    "name": "",
-    "description": "",
-    "spec": [
-      {"question_name": "Nome da Organization", "variable": "rbac_org_name", "type": "text", "min": 1, "max": 512, "required": true},
-      {"question_name": "Descrição da Organization", "variable": "rbac_org_description", "type": "text", "min": 0, "max": 1024, "required": false},
-      {"question_name": "Áreas (uma por linha)", "question_description": "Uma área por linha, ex.: Windows / Linux. Vira um Team simples por area.", "variable": "rbac_org_teams", "type": "textarea", "min": 1, "max": 4096, "required": true, "default": "Windows\nLinux"}
-    ]
-  }'
-```
+Pela UI: Templates → `RBAC - Criar Organização com Teams` → aba **Survey**
+→ **Add** → crie as 3 perguntas da tabela acima, na ordem, com os mesmos
+tipos/variáveis/limites.
 
 ---
 
