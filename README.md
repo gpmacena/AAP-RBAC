@@ -37,9 +37,7 @@ gateway (Organizations, Teams e Custom Roles).
 - As roles são de Organization: valem para todos os objetos dela. Para
   isolar áreas de verdade, use Organizations diferentes.
 
-Ver [SURVEYS.md](SURVEYS.md) para o detalhe dos surveys dos Job Templates e
-[AAP_RBAC_SETUP_PROMPT.md](AAP_RBAC_SETUP_PROMPT.md) para o passo a passo de
-configuração no AAP (Project, Credential, Inventory, Job Templates).
+Ver [SURVEYS.md](SURVEYS.md) para o detalhe dos surveys dos Job Templates.
 
 ## Requisitos
 
@@ -56,9 +54,7 @@ ser configurado é a plataforma em si:
 
 ### 1. No AAP (sem mexer em código)
 
-Siga o passo a passo completo em
-[AAP_RBAC_SETUP_PROMPT.md](AAP_RBAC_SETUP_PROMPT.md). Resumo do que você
-cria lá, apontando pro **seu** ambiente:
+Crie, apontando pro **seu** ambiente:
 
 | Item | O que configurar |
 |---|---|
