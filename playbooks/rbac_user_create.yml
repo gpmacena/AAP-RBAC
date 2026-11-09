@@ -1,0 +1,33 @@
+---
+# Cria um usuario LOCAL no AAP (gateway), se ele ainda nao existir, e em
+# seguida garante Team + role do perfil - igual a
+# playbooks/rbac_assign_user.yml, mas criando o usuario primeiro.
+#
+# Use isto so para usuarios LOCAIS (ex.: contas de servico, usuarios de
+# teste). Usuarios de AD/SSO aparecem sozinhos no AAP no primeiro login -
+# para esses, use direto playbooks/rbac_assign_user.yml.
+#
+# Variaveis (preenchidas pelo survey do Job Template ou via -e):
+#   rbac_user_username    username do novo usuario
+#   rbac_user_password    senha do novo usuario
+#   rbac_user_email       email (opcional)
+#   rbac_user_first_name  nome (opcional)
+#   rbac_user_last_name   sobrenome (opcional)
+#   rbac_org_name         nome da Organization (ex.: Infra)
+#   rbac_team_name        area/Team (ex.: Linux)
+#   rbac_persona          Administrator | Operator | Developer | Auditor
+
+- name: RBAC AAP 2.7 - Criar usuario local e definir seu perfil
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars_files:
+    - ../vars/rbac/personas.yml
+    - ../vars/rbac/roles.yml
+
+  tasks:
+    - name: Criar usuario e atribuir o perfil
+      ansible.builtin.include_role:
+        name: rbac
+        tasks_from: user_create.yml

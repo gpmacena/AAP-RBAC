@@ -1,0 +1,83 @@
+---
+# Cria um usuario LOCAL no AAP (gateway), se ele ainda nao existir, e em
+# seguida garante Team + role do perfil, reaproveitando tasks/assign_user.yml
+# (mesma logica de "{Team} - {Perfil}" na Organization).
+#
+# Use isto SO para usuarios locais (ex.: contas de servico, usuarios de
+# teste). Usuarios de AD/SSO nao devem ser criados por aqui - eles aparecem
+# sozinhos no AAP no primeiro login; para esses, use direto
+# playbooks/rbac_assign_user.yml.
+#
+# Variaveis (preenchidas pelo survey do Job Template ou via -e):
+#   rbac_user_username    username do novo usuario
+#   rbac_user_password    senha do novo usuario (pergunta tipo "password" no survey - nunca aparece no log)
+#   rbac_user_email       email (opcional)
+#   rbac_user_first_name  nome (opcional)
+#   rbac_user_last_name   sobrenome (opcional)
+#   rbac_org_name         nome da Organization (ex.: Infra)
+#   rbac_team_name        area/Team (ex.: Linux)
+#   rbac_persona          Administrator | Operator | Developer | Auditor
+#
+# Usuarios que ja existem nao sao recriados nem tem a senha alterada - so
+# tem o Team/perfil garantidos (tasks/assign_user.yml).
+
+- name: Validar variaveis de conexao
+  ansible.builtin.assert:
+    that:
+      - aap_host | length > 0
+      - aap_token | length > 0 or (aap_username | length > 0 and aap_password | length > 0)
+    fail_msg: >-
+      Variaveis CONTROLLER_* ausentes. No AAP, anexe ao Job Template uma credential
+      do tipo "Red Hat Ansible Automation Platform".
+    quiet: true
+
+- name: Criar o usuario local, se ainda nao existir
+  module_defaults:
+    ansible.builtin.uri:
+      url_username: "{{ aap_username }}"
+      url_password: "{{ aap_password }}"
+      force_basic_auth: "{{ aap_token | length == 0 }}"
+      headers: "{{ {'Authorization': 'Bearer ' ~ aap_token} if aap_token | length > 0 else {} }}"
+      validate_certs: "{{ aap_validate_certs }}"
+      return_content: true
+  vars:
+    new_user_name: "{{ rbac_user_username | default('') | trim }}"
+  block:
+    - name: Validar dados informados
+      ansible.builtin.assert:
+        that:
+          - new_user_name | length > 0
+          - (rbac_user_password | default('')) | length > 0
+        fail_msg: "Informe username e senha do novo usuario."
+        quiet: true
+
+    - name: Verificar se o usuario ja existe
+      ansible.builtin.uri:
+        url: "{{ aap_host }}/api/gateway/v1/users/?username={{ new_user_name | urlencode }}"
+      register: new_user_lookup
+      check_mode: false  # consulta somente leitura
+
+    - name: Criar o usuario local
+      ansible.builtin.uri:
+        url: "{{ aap_host }}/api/gateway/v1/users/"
+        method: POST
+        body_format: json
+        body:
+          username: "{{ new_user_name }}"
+          password: "{{ rbac_user_password }}"
+          email: "{{ rbac_user_email | default('') | trim }}"
+          first_name: "{{ rbac_user_first_name | default('') | trim }}"
+          last_name: "{{ rbac_user_last_name | default('') | trim }}"
+        status_code: 201
+      when: new_user_lookup.json.count == 0
+      changed_when: true
+      no_log: true  # o body carrega a senha em texto puro
+
+    - name: Resumo da criacao
+      ansible.builtin.debug:
+        msg: >-
+          Usuario '{{ new_user_name }}'
+          {{ 'criado' if new_user_lookup.json.count == 0 else 'ja existia (senha nao foi alterada)' }}.
+
+- name: Garantir Team e perfil do usuario
+  ansible.builtin.include_tasks: assign_user.yml

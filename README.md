@@ -11,13 +11,15 @@ gateway (Organizations, Teams e Custom Roles).
 ├── collections/requirements.yml      # ansible.controller >=4.8.0
 ├── playbooks/
 │   ├── rbac_org_create.yml           # cria Organization + Teams de área + 4 roles por Team
-│   └── rbac_assign_user.yml          # vincula um usuário a uma das 4 roles de um Team
+│   ├── rbac_assign_user.yml          # vincula um usuário (já existente) a uma das 4 roles de um Team
+│   └── rbac_user_create.yml          # cria um usuário local + vincula a uma das 4 roles de um Team
 ├── roles/rbac/
 │   ├── tasks/
 │   │   ├── org_create.yml
 │   │   ├── area_roles.yml            # gera/garante as 4 roles "{Team} - {Perfil}"
 │   │   ├── ensure_roles.yml          # cria/corrige Custom Roles via API (controller + gateway)
-│   │   └── assign_user.yml
+│   │   ├── assign_user.yml
+│   │   └── user_create.yml           # cria usuário local e chama assign_user.yml
 │   ├── defaults/main.yml
 │   └── meta/main.yml
 └── vars/rbac/
@@ -36,6 +38,10 @@ gateway (Organizations, Teams e Custom Roles).
   Team — permite perfis diferentes dentro do mesmo Team.
 - As roles são de Organization: valem para todos os objetos dela. Para
   isolar áreas de verdade, use Organizations diferentes.
+- Usuário de AD/SSO: já precisa existir no AAP (aparece sozinho após o
+  primeiro login) — use `rbac_assign_user.yml` só para dar o perfil.
+- Usuário local (conta de serviço, usuário de teste): `rbac_user_create.yml`
+  cria o usuário e já dá o perfil em uma única execução.
 
 Ver [SURVEYS.md](SURVEYS.md) para o detalhe dos surveys dos Job Templates.
 
@@ -62,7 +68,7 @@ Crie, apontando pro **seu** ambiente:
 | Project | aponte a SCM URL para o seu fork/clone deste repositório (`https://github.com/<seu-usuario>/AAP-RBAC.git`) |
 | Credential | crie uma do tipo **Red Hat Ansible Automation Platform**, com host/usuário/senha (ou token) do **seu** controller |
 | Inventory | um Inventory simples com `localhost` (`ansible_connection=local`) — os playbooks só chamam API, não tocam em host nenhum |
-| Job Templates | crie os dois (`RBAC - Criar Organização com Teams` e `RBAC - Definir Perfil de Usuário`), ligados ao Project/Credential/Inventory acima, com os surveys descritos em [SURVEYS.md](SURVEYS.md) |
+| Job Templates | crie os três (`RBAC - Criar Organização com Teams`, `RBAC - Definir Perfil de Usuário` e `RBAC - Criar Usuário Local`), ligados ao Project/Credential/Inventory acima, com os surveys descritos em [SURVEYS.md](SURVEYS.md) |
 
 ### 2. No código (opcional, só se quiser mudar o padrão)
 

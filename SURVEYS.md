@@ -1,8 +1,8 @@
 # Surveys — RBAC AAP 2.7
 
-Job Templates a criar no AAP para `playbooks/rbac_org_create.yml` e
-`playbooks/rbac_assign_user.yml` (role `rbac`, API do gateway) e as
-perguntas de cada survey.
+Job Templates a criar no AAP para `playbooks/rbac_org_create.yml`,
+`playbooks/rbac_assign_user.yml` e `playbooks/rbac_user_create.yml` (role
+`rbac`, API do gateway) e as perguntas de cada survey.
 
 ## Modelo
 
@@ -22,6 +22,7 @@ perguntas de cada survey.
 |---|---|---|---|
 | RBAC - Criar Organização com Teams | `playbooks/rbac_org_create.yml` | Sim |
 | RBAC - Definir Perfil de Usuário | `playbooks/rbac_assign_user.yml` | Sim |
+| RBAC - Criar Usuário Local | `playbooks/rbac_user_create.yml` | Sim |
 
 Credential (ambos): `AAP Controller - Admin` (tipo *Red Hat Ansible
 Automation Platform*) · Inventory: `Localhost` ·
@@ -100,3 +101,41 @@ nome — viram `{Team} - {Perfil}`).
 
 Administrator = mesmas permissões das roles nativas "Organization {Recurso}
 Admin" (inclui criar e apagar).
+
+---
+
+## JT — RBAC - Criar Usuário Local
+
+Cria um usuário **local** no AAP (gateway) se ele ainda não existir e, na
+sequência, faz exatamente o que o JT "RBAC - Definir Perfil de Usuário" faz
+(garante as 4 roles do Team e vincula ao usuário a role `{Team} - {Perfil}`).
+
+> Use isto só para usuários **locais** (contas de serviço, usuários de
+> teste). Usuário de AD/SSO aparece sozinho no AAP no primeiro login — para
+> esses, use o JT "RBAC - Definir Perfil de Usuário".
+
+Se o usuário já existir, ele **não** é recriado nem tem a senha alterada —
+só tem o Team/perfil garantidos.
+
+### Perguntas
+
+| # | Pergunta | Variável | Tipo | Obrigatória | Padrão |
+|---|---|---|---|---|---|
+| 1 | Username | `rbac_user_username` | Texto (1–150) | Sim | — |
+| 2 | Senha | `rbac_user_password` | **Password** (1–1024) | Sim | — |
+| 3 | E-mail | `rbac_user_email` | Texto (0–254) | Não | — |
+| 4 | Nome | `rbac_user_first_name` | Texto (0–150) | Não | — |
+| 5 | Sobrenome | `rbac_user_last_name` | Texto (0–150) | Não | — |
+| 6 | Organization | `rbac_org_name` | Texto (1–512) | Sim | `Infra` |
+| 7 | Team | `rbac_team_name` | Texto (1–512) | Sim | — |
+| 8 | Perfil | `rbac_persona` | Múltipla escolha: Administrator / Operator / Developer / Auditor | Sim | — |
+
+- Use o tipo **Password** na pergunta 2 — o AAP mascara o valor na tela e no
+  histórico de jobs.
+- O Team precisa existir (JT "RBAC - Criar Organização com Teams").
+
+### Criar o survey no JT
+
+Pela UI: Templates → `RBAC - Criar Usuário Local` → aba **Survey** →
+**Add** → crie as 8 perguntas da tabela acima, na ordem, com os mesmos
+tipos/variáveis/limites.
